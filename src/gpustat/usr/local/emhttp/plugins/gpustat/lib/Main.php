@@ -93,6 +93,11 @@ class Main
             'temp'      => 'N/A',
             'tempmax'   => 'N/A',
             'util'      => 'N/A',
+            'pciegen'       => 'N/A',
+            'pciegenmax'    => 'N/A',
+            'pciewidth'     => 'N/A',
+            'pciewidthmax'  => 'N/A',
+            'igpu' => "",
         ];
     }
 
@@ -119,6 +124,80 @@ class Main
     }
 
     /**
+     * Checks if card is bound to VFIO
+     *
+     * @param string $pciid
+     * @return bool $vfio
+     */
+    protected function checkVFIO(string $pciid)
+    {
+        $files = @scandir("/sys/bus/pci/drivers/vfio-pci/") ;
+        if ($files) $vfio = in_array($pciid, $files) ; else $vfio = $files ;
+        return $vfio ;
+    }
+
+    /**
+     * Checks get kernel driver.
+     *
+     * @param string $pciid
+     * @return string $driver
+     */
+    protected function getKernelDriver2(string $pciid) {
+        $driver = '';
+        if (is_link('/sys/bus/pci/devices/'.$pciid.'/driver')) {
+            $strLink = @readlink('/sys/bus/pci/devices/'.$pciid.'/driver');
+            if (!empty($strLink)) {
+                $driver = basename($strLink);
+            }
+        }
+        return $driver;
+    }
+    protected function getKernelDriver(string $pciid): string {
+        $command = "udevadm info --query=property --path=/sys/bus/pci/devices/$pciid | grep 'DRIVER='";
+        $output = shell_exec($command);
+        return $output ? trim(str_replace('DRIVER=', '', $output)) : '';
+    }
+
+    /**
+     * Checks get PCIe bandwidth.
+     *
+     * @param string $pciid
+     * 
+     */
+    protected function getPCIeBandwidth(string $pciid) {
+        $sysfs_path = "/sys/bus/pci/devices/$pciid";
+        
+        if (file_exists("$sysfs_path/max_link_speed") && file_exists("$sysfs_path/max_link_width")) {
+            $pciegen = trim(file_get_contents("$sysfs_path/max_link_speed"));
+            $this->pageData['pciegen'] = $this->get_pcie_gen($pciegen);
+            $pciegenmax = file_exists("$sysfs_path/current_link_speed") ? trim(file_get_contents("$sysfs_path/current_link_speed")) : "N/A";
+            $this->pageData['pciegenmax'] = $this->get_pcie_gen($pciegenmax);
+            $this->pageData['pciewidthmax'] = trim(file_get_contents("$sysfs_path/max_link_width"));
+            $this->pageData['pciewidth'] = file_exists("$sysfs_path/current_link_width") ? trim(file_get_contents("$sysfs_path/current_link_width")) : "N/A";  
+            $this->pageData['igpu'] = (strpos($pciid, "0000:00:") === 0) ? "1" : "0";
+        }  
+    }
+
+    /**
+    * Checks get PCIe gen.
+    *
+    * @param string $speed
+    * @return int gen.
+    */
+    protected function get_pcie_gen($speed) {
+        $speed=trim($speed);
+        $speed_map = [
+            "2.5 GT/s PCIe" => 1,
+            "5.0 GT/s PCIe" => 2,
+            "8.0 GT/s PCIe" => 3,
+            "16.0 GT/s PCIe" => 4,
+            "32.0 GT/s PCIe" => 5,
+            "64.0 GT/s PCIe" => 6
+        ];
+        return $speed_map[$speed] ?? $speed;
+    }
+
+    /**
      * Runs a command in shell and stores STDOUT in class variable
      *
      * @param string $command
@@ -132,6 +211,67 @@ class Main
         } else {
             $this->stdout = shell_exec(sprintf("%s %s", $command, $argument));
         }
+    }
+
+    protected function get_gpu_vm($vmpciid){
+        global $lstpci;
+        $libvirtd_running = is_file('/var/run/libvirt/libvirtd.pid') ;
+        if (!$libvirtd_running) return false;
+        if (!isset($lstpci)) {
+          $lspci_lines = explode("\n", trim(shell_exec("lspci -n")));
+          $lspci = array();
+            foreach ($lspci_lines as $line) {
+              // Strip content inside parentheses using preg_replace
+              $cleaned_line = preg_replace('/\s*\(.*?\)\s*/', '', $line);
+              // Split the cleaned line into parts
+              list($device, $info) = explode(' ', $cleaned_line, 2);
+              // Extract the key part for array key (both parts like c0a9:5407)
+              $info_parts = explode(' ', $info);
+              $key = $info_parts[1]; // This extracts the full key like "c0a9:5407"
+              // Add to the array using the extracted part as the key
+              $lspci[$key] = [
+                'type' => $info_parts[0],
+                'pciid' => $device
+              ];
+            }
+          }
+
+        $vmpcilist = array();
+        $doms = explode("\n",shell_exec("virsh list --name"));      
+        for ($i = 0; $i < sizeof($doms); $i++) {
+            if ($doms[$i] == "") continue;
+            $name = $doms[$i];
+            $output = explode("\n",shell_exec('virsh qemu-monitor-command "'.$name.'" --hmp info pci | grep VGA'));
+            foreach($output as $string) {
+              // Check if the output contains the PCI device ID
+              if (preg_match('/PCI device (\S+)/', $string, $matches)) {
+                  // Extract the PCI device ID
+                  $pciDeviceID = $matches[1];
+                  if ($pciDeviceID == "1b36:0100") continue;
+                  if (isset($lspci[$pciDeviceID]["pciid"])) {
+                    $pciid = $lspci[$pciDeviceID]["pciid"];
+                    $vmpcilist[$pciid] = $name;
+                  }
+              }
+            }
+        }
+
+        #GetIcon
+        global $docroot;
+        if (array_key_exists($vmpciid,$vmpcilist)) {
+        $strIcon = '/plugins/dynamix.vm.manager/templates/images/default.png';
+        $strIconGet = shell_exec("virsh dumpxml '".$vmpcilist[$vmpciid]."' --xpath \"//domain/metadata/*[local-name()='vmtemplate']/@icon\"");
+        preg_match('/icon="([^"]+)"/', $strIconGet, $matches);
+        $strIcon = $matches[1] ?? $strIcon;  // This will contain the icon value
+        if (is_file($strIcon)) {
+            $strIcon = $strIcon;
+        } elseif (is_file("$docroot/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
+            $strIcon = '/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
+        } elseif (is_file("$docroot/boot/config/plugins/dynamix.vm.manager/templates/images/" . $strIcon)) {
+            $strIcon = '/boot/config/plugins/dynamix.vm.manager/templates/images/' . $strIcon;
+        }
+    }
+        return isset($vmpcilist[$vmpciid]) ? $vmpcilist[$vmpciid].','.$strIcon : false;
     }
 
     /**
@@ -151,24 +291,50 @@ class Main
 
         return $command;
     }
-
-    /**
-     * Retrieves the full command of a parent process with arguments for a given process ID
-     *
-     * @param int $pid
-     * @return string
-     */
+    /*
+    * Retrieves the full command of a parent process with arguments for a given process ID
+    *
+    * @param int $pid
+    * @return string
+    */
     protected function getParentCommand(int $pid): string
     {
         $command = '';
         $pid_command = sprintf('ps j %0d | awk \'{ \$1=\$1 };NR>1\' | cut -d \' \' -f 1', $pid);
 
-        $ppid = (int)trim(shell_exec($pid_command));
+        $ppid = (int)trim(shell_exec($pid_command) ?? 0);
         if ($ppid > 0) {
             $command = $this->getFullCommand($ppid);
         }
 
         return $command;
+    }
+    
+    /**
+    * Retrieves sysfs files or defaults if no file
+    *
+    * @return 
+    */
+    protected function get_value($path, $default = "N/A") {
+        return file_exists($path) ? trim(file_get_contents($path)) : $default;
+    }
+
+    /**
+    * Retrieves hwmon path.
+    *
+    * @return mixed
+    */
+    protected function find_hwmon_path($pci_id) {
+        $hwmon_base = "/sys/class/hwmon/";
+        foreach (glob("$hwmon_base/hwmon*") as $hwmon) {
+            if (file_exists("$hwmon/device")) {
+                $device_real_path = realpath("$hwmon/device");
+                if (strpos($device_real_path, $pci_id) !== false) {
+                    return $hwmon;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -192,27 +358,6 @@ class Main
         preg_match_all($regex, $this->stdout, $this->inventory, PREG_SET_ORDER);
     }
 
-    /**
-     * Echoes JSON to web renderer -- used to populate page data
-     */
-    protected function echoJson()
-    {
-        // Page file JavaScript expects a JSON encoded string
-        if (is_array($this->pageData)) {
-            // If errors exist, do not encode anything else for send
-            if (isset($this->pageData['errors'])) {
-                $json = json_encode($this->pageData['errors']);
-            } else {
-                $json = json_encode($this->pageData);
-            }
-            header('Content-Type: application/json');
-            header('Content-Length:' . ES . strlen($json));
-            echo $json;
-        } else {
-            // Can't echo JSON for debug, so print_r for array data
-            print_r(Error::get(Error::BAD_ARRAY_DATA));
-        }
-    }
 
     /**
      * Strips all spaces from a provided string

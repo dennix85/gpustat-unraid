@@ -1,10 +1,10 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
-<!ENTITY author    "b3rs3rk">
-<!ENTITY version   "2022.11.30a">
+<!ENTITY author    "SimonFair">
+<!ENTITY version   "2024.12.14">
 <!ENTITY launch    "Settings/GPUStatSettings">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/b3rs3rk/&name;-unraid/master">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/SimonFair/&name;-unraid/master">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/pkg">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
@@ -27,6 +27,7 @@
   MIT License
 
   Copyright (c) 2020-2022 b3rs3rk
+  Copyright (c) 2023-2024 SimonFair
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -48,6 +49,147 @@
 -->
 
 <CHANGES>
+###2024-12-14
+
+- add QEMU app support
+
+###2024-12-03
+
+- re package
+
+###2024-11-28
+
+- plg file updates.
+
+###2024-11-18
+
+- fix chrome browser issue for select in settings.
+
+###2024-11-07
+
+- fix config path
+- chg State Threshold layout for Nvidia GPUs.
+
+###2024-10-27
+
+- add tunarr
+
+###2024-10-25a
+
+- fix parent pid check so Emby is detected.
+- php and max util check updates.
+
+###2024-10-25
+
+- add apps debug options, defaults off need to edit Intel or Nvidia lib files to make =true.
+
+###2024-10-22a
+
+- fix Jellyfin
+
+###2024-10-22
+
+- add Intel use max util from the 4 bars as title util.
+
+###2024-10-21
+
+- add Xorg App
+- fix Emby
+
+###2024-10-16
+
+- add Intel timers to settings
+- fix Nvidia model if not tools loaded.
+
+###2024-10-13
+
+- add icon to next to VM.
+
+###2024-10-12a
+
+- remove dependency for gpu tools.
+
+###2024-10-12
+
+- add Show which VM is using GPU.
+
+###2024-09-26
+
+- add Chia, mmx and Subspace for NV(PR from tjb-altf4 thanks)
+- add revised Ollama icon(PR from  nwithan8)
+- add App support for Intel. Some apps may need revision to show.
+
+###2024-08-26a
+
+- add LocalAI app for nvidia GPU - PR from  nwithan8.
+- add Immich for nvidia GPU - PR from  nwithan8.
+
+###2024-08-26
+
+- Fix timer abs values
+- add Ollama app for nvidia GPU - PR from  nwithan8.
+
+###2024-06-21
+
+- Fixes PHP errors in AMD lib.
+
+###2024-03-16
+
+- Change Intel processsing thanks to ich777.
+- Add Compreface as an app for Nvidia thanks to Corgan.
+- Set minimum refresh to 2 seconds in settings.
+
+###2023-12-07
+
+- Add Intel gpu top timer override value.
+
+###2023-11-09
+
+- Fix VFIO check function.
+
+###2023-10-29d
+
+- Fix passing null to checkVFIO function.
+- Fix Icon issue.
+
+###2023-10-29a
+
+- Allow selection of NVidia GPU is driver not installed.
+- Show Errors if Vendor commands missing or invalid data
+- Add support for codeproject app(chillr21)
+- Add support for Threadfin. 
+- Fix dashboard panel display if minimised.
+
+###2023-10-06
+
+- Show model number if GeForce card.
+
+###2023-09-07
+
+- Fix for new Intel_gpu_top
+
+###2023-06-10
+
+- Fixes for new NVidia Driver. Power draw and Throttling.
+
+###2023-06-09
+
+- Fix location retention issue when moving panels. Note this will reset locations and will need to be move to the required location.
+
+###2023-05-01
+
+- Set default for refresh to 30 seconds for new installs.
+
+###2023-04-12a
+
+- Fix for iGPUs call Display Controller.
+
+###2023-03-27
+- Fix apply for Multilanguage.
+
+###2023-03-21a
+- Fix GPU removal if none selected.
+- Fix Show only GPU if one panel selected rather than GPU1 as title
 
 ###2022-11-30
 - Fix case sensitivity in parent app detection preventing matches
@@ -183,11 +325,18 @@ elif [ "$(which radeontop 2>/dev/null)" ] || [ -d /boot/config/plugins/radeontop
 else
     echo "********************************************************************"
     echo
-    echo "No vendor utilities found.  Plugin install terminated due to failed prerequisites."
+    echo "No vendor utilities found."
+    echo "Limited functions only i.e. if bound to vfio or a GPU active in a VM."
     echo
     echo "********************************************************************"
-    rm -rf /boot/config/plugins/&name;
-    exit 1
+fi
+
+# Check if UIREFRESHINT is at minimum 2000ms
+if [ -f /boot/config/plugins/gpustat/gpustat.cfg ]; then
+  REFRESH_INT=$(cat /boot/config/plugins/gpustat/gpustat.cfg | grep UIREFRESHINT | cut -d '=' -f2 | sed 's/[ "]//g')
+  if [ "${REFRESH_INT}" -lt 2000 ]; then
+    sed -i '/^UIREFRESHINT/c\UIREFRESHINT = 2000' /boot/config/plugins/gpustat/gpustat.cfg
+  fi
 fi
 
 </INLINE>
@@ -215,7 +364,7 @@ fi
     DISPTHROTTLE="1"
     DISPSESSIONS="1"
     UIREFRESH="1"
-    UIREFRESHINT="1000"
+    UIREFRESHINT="2000"
     DISPMEMUTIL="1"
     DISP3DRENDER="1"
     DISPBLITTER="1"
@@ -233,9 +382,16 @@ fi
     DISPDEPTHBLK="1"
     DISPCOLORBLK="1"
     DISPGFXTRANS="1"
+    IGTTIMER =".7 1.3"
    ]]>
   </INLINE>
  </FILE>
+
+<FILE Run="/bin/bash">
+ <INLINE>
+  rm -f $(ls &plgPATH;/&name;*.txz 2>/dev/null|grep -v '&version;')
+ </INLINE>
+</FILE>
 
   <!-- The 'remove' script. -->
   <FILE Run="/bin/bash" Method="remove">

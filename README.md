@@ -74,6 +74,16 @@ If any issues occur, visit the support thread [here](https://forums.unraid.net/t
 
 The bulk of this code was adapted from/inspired by @realies and @CyanLabs corsairpsu-unraid project!
 
+## Development
+
+### Contribute to "Active Apps"
+
+1. Determine the process name of the application [using `nvidia-smi`](https://gist.github.com/padeoe/771c4972ae185c9a7d3d497fa4e1ecab)
+2. Add the app name to the `apps` arrays in `gpustatus.php` and `gpustatusmoveablemulti.php`
+3. Map the app name to the full or partial process name (should be able to uniquely identify the process) in `SUPPORTED_APPS` in `Nvidia.php`
+4. Add an app icon to the `images` folder (name the file the same as the app name)
+5. [Submit a pull request](https://github.com/SimonFair/gpustat-unraid/compare) with the changes
+
 ## Contributor Thanks
 
     - @mlapaglia for his work on UI slider bars
