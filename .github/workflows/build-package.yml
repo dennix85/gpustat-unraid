@@ -4,7 +4,7 @@ name: Build gpustat package
 on:
   workflow_dispatch:
   push:
-    branches: [ dev ]
+    branches: [ main ]
     paths:
       - 'src/**'
       - 'gpustat.plg'
@@ -72,7 +72,21 @@ jobs:
           git add pkg/ gpustat.plg gpustat-dev.plg
           if git diff --cached --quiet; then
             echo "No changes to commit."
-          else
-            git commit -m "Automated build: gpustat package $(date +%Y.%m.%d)"
-            git push
+            exit 0
           fi
+          git commit -m "Automated build: gpustat package $(date +%Y.%m.%d)"
+
+          # The build job's checkout can go stale if another run (or a manual
+          # push) lands on dev while this job is running. Rebase onto the
+          # latest remote state and retry instead of failing outright.
+          for i in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $i) -- fetching and rebasing..."
+            git fetch origin dev
+            git rebase origin/dev
+          done
+
+          echo "Failed to push after retries."
+          exit 1
