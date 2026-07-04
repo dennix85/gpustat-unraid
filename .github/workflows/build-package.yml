@@ -1,0 +1,78 @@
+name: Build gpustat package
+
+# Manual trigger, plus automatic builds whenever the plugin source changes.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'gpustat.plg'
+      - 'gpustat-dev.plg'
+
+jobs:
+  build:
+    # Real Slackware userland (gcc + native pkgtools/makepkg), so the build
+    # matches the actual Unraid target far more closely than a plain Ubuntu
+    # runner would.
+    runs-on: ubuntu-latest
+    container:
+      image: andy5995/slackware-build-essential:15.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build package
+        run: bash ./src/mkpkg gpustat
+
+      - name: Upload built package as CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpustat-package
+          path: |
+            pkg/*.txz
+            pkg/*.md5
+          if-no-files-found: error
+
+      - name: Upload updated .plg files
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpustat-plg
+          path: |
+            gpustat.plg
+            gpustat-dev.plg
+
+  commit:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: gpustat-package
+          path: pkg
+
+      - name: Download updated .plg files
+        uses: actions/download-artifact@v4
+        with:
+          name: gpustat-plg
+          path: .
+
+      - name: Commit new package
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pkg/ gpustat.plg gpustat-dev.plg
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Automated build: gpustat package $(date +%Y.%m.%d)"
+            git push
+          fi
