@@ -4,7 +4,7 @@ name: Build gpustat package
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ dev ]
     paths:
       - 'src/**'
       - 'gpustat.plg'
