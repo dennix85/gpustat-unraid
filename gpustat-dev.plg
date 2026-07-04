@@ -4,7 +4,7 @@
 <!ENTITY author    "b3rs3rk">
 <!ENTITY version   "2023.10.08">
 <!ENTITY launch    "Settings/GPUStatSettings">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/dennix85/&name;-unraid/main">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/dennix85/&name;-unraid/dev">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
 <!ENTITY pkgURL    "&gitURL;/pkg">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
