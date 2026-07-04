@@ -318,10 +318,62 @@ class Intel extends Main
                     $this->pageData['power'] = $this->roundFloat($data['power']['value'], 2) . $data['power']['unit'];
                 // Newer version of intel_gpu_top includes GPU and package power readings, just scrape GPU for now
                 } else {
-                    if (isset($data['power']['Package']) && ($this->settings['DISPPWRDRWSEL'] == "MAX" || $this->settings['DISPPWRDRWSEL'] == "PACKAGE" )) $powerPackage = $this->roundFloat($data['power']['Package'], 2) ; else $powerPackage = 0 ;
-                    if (isset($data['power']['GPU']) && ($this->settings['DISPPWRDRWSEL'] == "MAX" || $this->settings['DISPPWRDRWSEL'] == "GPU" )) $powerGPU = $this->roundFloat($data['power']['GPU'], 2) ;  else $powerGPU = 0 ;
+                    // Some discrete GPUs (e.g. Arc dGPUs) only populate one of the two
+                    // power rails -- commonly just "Package", with no separate "GPU"
+                    // reading. Fall back to whichever rail is actually present instead
+                    // of reporting 0 when the user's preferred rail is missing.
+                    $powerPackageRaw = isset($data['power']['Package']) ? $this->roundFloat($data['power']['Package'], 2) : null;
+                    $powerGPURaw = isset($data['power']['GPU']) ? $this->roundFloat($data['power']['GPU'], 2) : null;
                     if (isset($data['power']['unit'])) $powerunit = $data['power']['unit'] ; else $powerunit = "" ;
-                    $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;               
+
+                    if ($this->settings['DISPPWRDRWSEL'] == "PACKAGE") {
+                        $powerPackage = $powerPackageRaw ?? $powerGPURaw ?? 0;
+                        $powerGPU = $powerGPURaw ?? 0;
+                    } elseif ($this->settings['DISPPWRDRWSEL'] == "GPU") {
+                        $powerGPU = $powerGPURaw ?? $powerPackageRaw ?? 0;
+                        $powerPackage = $powerPackageRaw ?? 0;
+                    } else {
+                        // MAX
+                        $powerPackage = $powerPackageRaw ?? 0;
+                        $powerGPU = $powerGPURaw ?? 0;
+                    }
+
+                    if ($powerPackageRaw === null && $powerGPURaw === null) {
+                        $this->pageData['power'] = 'N/A';
+                    } else {
+                        $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;
+                    }
+                }
+            }
+            if ($this->settings['DISPMEMUTIL']) {
+                // intel_gpu_top exposes no total/used VRAM figures in its JSON output.
+                // The only way to get the same numbers nvtop shows is the same route
+                // nvtop uses: DRM_IOCTL_I915_QUERY / DRM_I915_QUERY_MEMORY_REGIONS
+                // against the render node. That ioctl can't be called from PHP, so we
+                // shell out to a small compiled helper that does it and hand back JSON.
+                $renderPaths = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/drm/renderD*");
+                $helper = __DIR__ . '/../helpers/i915_mem_query';
+                if (isset($renderPaths[0]) && is_file($helper)) {
+                    $renderNode = '/dev/dri/' . basename($renderPaths[0]);
+                    $memOut = shell_exec(escapeshellcmd($helper) . ' ' . escapeshellarg($renderNode) . ' 2>/dev/null');
+                    $memData = json_decode((string) $memOut, true);
+                    if (!empty($memData['regions'])) {
+                        // Prefer the DEVICE (class 1) region -- dedicated VRAM on
+                        // discrete cards like Arc. Fall back to SYSTEM (class 0)
+                        // for integrated GPUs which have no dedicated region.
+                        $chosen = null;
+                        foreach ($memData['regions'] as $region) {
+                            if (($region['class'] ?? null) == 1) { $chosen = $region; break; }
+                            if ($chosen === null && ($region['class'] ?? null) == 0) $chosen = $region;
+                        }
+                        if ($chosen !== null) {
+                            $this->pageData['memtotal'] = round($chosen['total_bytes'] / 1024 / 1024, 0) . ' MiB';
+                            $this->pageData['memused'] = round($chosen['used_bytes'] / 1024 / 1024, 0) . ' MiB';
+                            if ((float) $chosen['total_bytes'] > 0) {
+                                $this->pageData['memutil'] = round($chosen['used_bytes'] / $chosen['total_bytes'] * 100) . '%';
+                            }
+                        }
+                    }
                 }
             }
             if ($this->settings['DISPFAN']) {
