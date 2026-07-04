@@ -300,6 +300,14 @@ class Intel extends Main
                     $this->pageData['videnh'] = $this->roundFloat($data['engines']['VideoEnhance']['busy']) . '%';
                 }
             }
+            // "Compute" is a distinct engine class reported by intel_gpu_top on
+            // Xe-HPG/Arc parts (separate from Render/3D) but was never actually
+            // read here -- pageData['compute'] stayed stuck at its 0 default.
+            if (isset($data['engines']['Compute/0']['busy'])) {
+                $this->pageData['compute'] = $this->roundFloat($data['engines']['Compute/0']['busy']) . '%';
+            } elseif (isset($data['engines']['Compute']['busy'])) {
+                $this->pageData['compute'] = $this->roundFloat($data['engines']['Compute']['busy']) . '%';
+            }
             if ($this->settings['DISPPCIUTIL']) {
                 if (isset($data['imc-bandwidth']['reads'], $data['imc-bandwidth']['writes'])) {
                     $this->pageData['rxutil'] = $this->roundFloat($data['imc-bandwidth']['reads'], 2) . " MB/s";
@@ -339,7 +347,29 @@ class Intel extends Main
                     }
 
                     if ($powerPackageRaw === null && $powerGPURaw === null) {
-                        $this->pageData['power'] = 'N/A';
+                        // intel_gpu_top has no power data at all on this card/driver
+                        // combo (confirmed: no "power" key in its JSON whatsoever).
+                        // Fall back to the same raw source nvtop reads directly --
+                        // the i915 hwmon energy counter -- and derive watts from
+                        // the rate of change over a short sample window.
+                        $energyPath = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/energy1_input");
+                        if (isset($energyPath[0]) && is_readable($energyPath[0])) {
+                            $e1 = (float) file_get_contents($energyPath[0]);
+                            $t1 = microtime(true);
+                            usleep(200000); // 200ms sample window
+                            $e2 = (float) file_get_contents($energyPath[0]);
+                            $t2 = microtime(true);
+                            $dt = $t2 - $t1;
+                            // energy1_input is cumulative microjoules; W = J/s
+                            if ($dt > 0 && $e2 >= $e1) {
+                                $watts = (($e2 - $e1) / 1000000) / $dt;
+                                $this->pageData['power'] = $this->roundFloat($watts, 1) . 'W';
+                            } else {
+                                $this->pageData['power'] = 'N/A';
+                            }
+                        } else {
+                            $this->pageData['power'] = 'N/A';
+                        }
                     } else {
                         $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;
                     }
