@@ -22,6 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Refresh to latest dev (narrows version-suffix race window)
+        run: |
+          git fetch origin dev
+          git reset --hard origin/dev
+
       - name: Build package
         run: bash ./src/mkpkg gpustat
 
@@ -78,14 +83,31 @@ jobs:
 
           # The build job's checkout can go stale if another run (or a manual
           # push) lands on dev while this job is running. Rebase onto the
-          # latest remote state and retry instead of failing outright.
+          # latest remote state and retry instead of failing outright. If the
+          # conflict is on the generated pkg/ artifacts themselves (two runs
+          # picking the same version suffix), it's not meaningfully
+          # mergeable -- keep this run's freshly built files and continue.
           for i in 1 2 3 4 5; do
             if git push; then
               exit 0
             fi
             echo "Push rejected (attempt $i) -- fetching and rebasing..."
             git fetch origin dev
-            git rebase origin/dev
+            if ! git rebase origin/dev; then
+              if git diff --name-only --diff-filter=U | grep -qv '^pkg/'; then
+                echo "Conflict outside pkg/ -- can't auto-resolve."
+                git rebase --abort
+                exit 1
+              fi
+              echo "Conflict is on generated pkg/ artifacts -- keeping this run's build."
+              git checkout --ours -- pkg/ 2>/dev/null || true
+              git add pkg/
+              if ! git rebase --continue; then
+                echo "Could not auto-resolve rebase conflict."
+                git rebase --abort
+                exit 1
+              fi
+            fi
           done
 
           echo "Failed to push after retries."
