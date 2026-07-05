@@ -452,14 +452,20 @@ class Intel extends Main
                         foreach ($data['clients'] as $id => $process) {
                             if (isset($process["name"])) {
                                 $this->detectApplication($process);
-                                if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender =+ $process['engine-classes']['Render/3D']['busy'];
-                                if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter =+ $process['engine-classes']['Blitter']['busy'];
-                                if (isset($process['engine-classes']['Video']['busy'])) $clientVideo =+ $process['engine-classes']['Video']['busy'];
-                                if (isset($process['engine-classes']['VideoEnhance']['busy'])) $clientVideoEnh =+ $process['engine-classes']['VideoEnhance']['busy'];
-                                if (isset($process['engine-classes']['Compute']['busy'])) $clientCompute =+ $process['engine-classes']['Compute']['busy'];
+                                if (isset($process['engine-classes']['Render/3D']['busy'])) $clientRender += $process['engine-classes']['Render/3D']['busy'];
+                                if (isset($process['engine-classes']['Blitter']['busy'])) $clientBlitter += $process['engine-classes']['Blitter']['busy'];
+                                if (isset($process['engine-classes']['Video']['busy'])) $clientVideo += $process['engine-classes']['Video']['busy'];
+                                if (isset($process['engine-classes']['VideoEnhance']['busy'])) $clientVideoEnh += $process['engine-classes']['VideoEnhance']['busy'];
+                                if (isset($process['engine-classes']['Compute']['busy'])) $clientCompute += $process['engine-classes']['Compute']['busy'];
                             }
                         }
-                        $maxcomputechk = 0;
+                        // NOTE: unlike the other four max*chk variables (which
+                        // correctly persist their value across the two
+                        // intel_gpu_top samples via lines below), maxcomputechk
+                        // used to get force-reset to 0 right here, which made
+                        // its check on the next line always true -- permanently
+                        // overriding the correct engine-level compute reading
+                        // with the (buggy) per-client fallback on every pass.
                         if ($max3drenderchk == 0) $this->pageData['3drender'] = $this->roundFloat($clientRender) . '%';
                         if ($maxblitterchk == 0) $this->pageData['blitter'] = $this->roundFloat($clientBlitter) . '%';
                         if ($maxvideochk == 0) $this->pageData['video'] = $this->roundFloat($clientVideo) . '%';
