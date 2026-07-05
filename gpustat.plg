@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "gpustat">
 <!ENTITY author    "SimonFair">
-<!ENTITY version   "2026.07.05a">
+<!ENTITY version   "2026.07.05b">
 <!ENTITY launch    "Settings/GPUStatSettings">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/dennix85/&name;-unraid/dev">
 <!ENTITY pluginURL "&gitURL;/&name;.plg">
