@@ -217,14 +217,9 @@ Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0-b
             <td></td>
         </tr>
 <?php endif; ?>
-<?php if($gpustat_cfg['DISPPCIUTIL']) : ?>
-        <tr class="dash_gpustat_toggle gpu-enviro">
-            <td></td>
-            <td>IMC Bus Utilization</td>
-            <td colspan="2">Receive: <span class='gpu-rxutil'></span> &emsp; Transmit: <span class='gpu-txutil'></span></td>
-            <td></td>
-        </tr>
-<?php endif; ?>
+<?php // IMC Bus Utilization row removed: structurally always N/A for both
+      // discrete Arc (dedicated VRAM, no IMC involved) and 12th-14th gen
+      // integrated GPUs (never actually populated by intel_gpu_top). ?>
 <?php if($gpustat_cfg['DISPCLOCKS']) : ?>
         <tr class="dash_gpustat_toggle gpu-enviro">
             <td></td>
