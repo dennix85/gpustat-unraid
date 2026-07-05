@@ -264,10 +264,10 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
             $page_render .= "</td></tr>" ;
         }
 
-        if($gpustat_cfg['DISPPCIUTIL']) {
-             $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw fa-bus'></i>_(IMC Bus Utilization)_" ;
-             $page_render .="</span><span class='w44'>Receive: <span class='gpu-rxutil$count'></span> &emsp; Transmit: <span class='gpu-txutil$count'></span></td></tr>" ;
-        }
+        // IMC Bus Utilization row removed: it's structurally always N/A for
+        // both discrete Arc (DG1/DG2/Battlemage/Celestial -- dedicated VRAM,
+        // no integrated memory controller involved at all) and 12th-14th gen
+        // integrated GPUs (never actually populated by intel_gpu_top either).
 
         if($gpustat_cfg['DISPCLOCKS']) {
              $page_render .="<tr class='vfio_notinuse$count'><td colspan ='2' ><span class='w36'><i class='ups fa fa-fw fa-clock-o'></i>_(GPU Clock (MHz))_" ;
