@@ -67,6 +67,7 @@ const gpustat_statusm = (input) => {
                         // Intel Slider Bars
                         $('.gpu-fanbar'+panel).removeAttr('style').css('width', parseInt(data["fan"] / data["fanmax"] * 100) + "%");
                         $('.gpu-powerbar'+panel).removeAttr('style').css('width', parseInt(data["power"].toString().replace("W","") / data["powermax"] * 100) + "%");
+                        $('.gpu-gpuclockbar'+panel).removeAttr('style').css('width', parseInt(data["clock"] / data["clockmax"] * 100) + "%");
                         let intelbars = ['3drender', 'blitter', 'video', 'videnh', 'powerutil', 'compute', 'memutil'];
                         intelbars.forEach(function (metric) {
                             $('.gpu-'+metric+'bar'+panel).removeAttr('style').css('width', data[metric]);
