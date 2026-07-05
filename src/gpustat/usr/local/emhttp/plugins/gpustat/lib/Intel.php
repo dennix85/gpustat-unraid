@@ -438,9 +438,19 @@ class Intel extends Main
                     }
                 }
             }
-            // According to the sparse documentation, rc6 is a percentage of how little the GPU is requesting power
+            // The Power Draw bar's fill is driven by powerutil. It used to be
+            // based purely on an rc6 (idle-state) heuristic and got force-reset
+            // to 0 whenever intel_gpu_top itself had no power data -- which is
+            // always true on Arc cards, so the hwmon-based reading above never
+            // showed up as a moving bar even though the wattage text was
+            // correct. Prefer an actual power-budget percentage whenever we
+            // have both a real wattage and a real power limit.
             if ($this->settings['DISPPWRSTATE']) {
-                if (isset($data['rc6']['value'])) {
+                $powerVal = isset($this->pageData['power']) ? (float) str_replace('W', '', (string) $this->pageData['power']) : null;
+                $powerMaxVal = isset($this->pageData['powermax']) ? (float) $this->pageData['powermax'] : null;
+                if ($powerVal !== null && $powerMaxVal !== null && $powerMaxVal > 0 && $this->pageData['power'] !== 'N/A') {
+                    $this->pageData['powerutil'] = $this->roundFloat($powerVal / $powerMaxVal * 100, 0) . "%";
+                } elseif (isset($data['rc6']['value'])) {
                     $this->pageData['powerutil'] = $this->roundFloat(100 - $data['rc6']['value'], 2) . "%";
                     if ($powerGPU == 0 && $this->pageData['powerutil'] != 0) $this->pageData['powerutil'] = 0;
                 }
