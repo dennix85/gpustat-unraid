@@ -374,6 +374,19 @@ class Intel extends Main
                         $this->pageData['power'] = max($powerGPU,$powerPackage) . $powerunit ;
                     }
                 }
+
+                // The JS bar-width calc (data.power / data.powermax) has always
+                // been there, it just never had a real powermax value to divide
+                // by for Intel. power1_max in hwmon is the card's configured
+                // power limit (PL1) -- the same figure nvtop shows as the
+                // second number in "POW 30 / 55 W".
+                $powerMaxPath = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/hwmon/*/power1_max");
+                if (isset($powerMaxPath[0]) && is_readable($powerMaxPath[0])) {
+                    $powerMaxMicrowatts = (float) file_get_contents($powerMaxPath[0]);
+                    if ($powerMaxMicrowatts > 0) {
+                        $this->pageData['powermax'] = $this->roundFloat($powerMaxMicrowatts / 1000000, 1);
+                    }
+                }
             }
             if ($this->settings['DISPMEMUTIL']) {
                 // intel_gpu_top exposes no total/used VRAM figures in its JSON output.
@@ -484,6 +497,9 @@ class Intel extends Main
             $this->pageData['util'] = $maxload.'%';
             
             $this->getPCIeBandwidth($this->settings['GPUID']);
+            if ($this->isIntelDiscreteArc()) {
+                $this->fixIntelArcPcieReporting($this->settings['GPUID']);
+            }
         } else {
             $this->pageData['error'][] = Error::get(Error::VENDOR_DATA_BAD_PARSE);
         }
@@ -638,6 +654,97 @@ class Intel extends Main
         file_put_contents("/tmp/inteljson",$return);
         return $return;
     }
-      
+
+    /**
+     * The fake-PCIe-chain reporting quirk is specific to Intel's discrete
+     * Xe-HPG/Xe2/Xe3 Arc silicon (DG1, DG2/Alchemist, Battlemage, and
+     * presumably Celestial once it ships) -- these are the only Intel GPUs
+     * that enumerate themselves as a chain of internal PCIe bridges at all.
+     * Integrated GPUs (UHD/Iris Xe/Arc Xe iGPU on Core/Ultra CPUs) sit
+     * directly on PCI bus 00 as part of the CPU package and don't have
+     * this problem, so we deliberately don't touch their PCIe reporting.
+     *
+     * @return bool
+     */
+    protected function isIntelDiscreteArc(): bool {
+        // Bus 00 is always the CPU's own integrated PCI root complex --
+        // integrated GPUs live there, discrete cards never do.
+        if (($this->pageData['igpu'] ?? '0') === '1') {
+            return false;
+        }
+        $name = $this->pageData['name'] ?? '';
+        // Architecture codenames as they appear in lspci/i915 device
+        // strings, e.g. "DG2 [Arc A380]". CLS/Celestial is a forward-looking
+        // guess based on Intel's established codename pattern (DG1, DG2,
+        // BMG) and should be revisited once real hardware ships.
+        $arcCodenames = ['DG1', 'DG2', 'BMG', 'Battlemage', 'CLS', 'Celestial', 'Arc'];
+        foreach ($arcCodenames as $codename) {
+            if (stripos($name, $codename) !== false) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Intel Arc discrete GPUs enumerate their own internal fabric as a fake
+     * PCIe chain, so the GPU's own PCI function (and often the node directly
+     * above it) reports a bogus "x1 / 2.5GT/s" link regardless of the real
+     * physical negotiated speed. This is a confirmed, documented Intel
+     * driver/firmware quirk (see Intel community forum reports for DG2/Arc
+     * A380 on multiple different motherboards), not a real hardware fault.
+     *
+     * The real link lives further up the PCI tree, at the first ancestor
+     * bridge whose reported speed/width genuinely differs from the GPU's
+     * own (bogus) values. This walks up looking for that node and, if
+     * found, overrides the pageData PCIe fields the shared
+     * getPCIeBandwidth() already set from the GPU's own (unreliable) sysfs
+     * entries.
+     *
+     * @param string $pciid
+     */
+    protected function fixIntelArcPcieReporting(string $pciid) {
+        $ownPath = "/sys/bus/pci/devices/$pciid";
+        if (!is_file("$ownPath/max_link_speed") || !is_file("$ownPath/max_link_width")) {
+            return;
+        }
+        $ownSpeed = trim(file_get_contents("$ownPath/max_link_speed"));
+        $ownWidth = trim(file_get_contents("$ownPath/max_link_width"));
+
+        $real = realpath($ownPath);
+        if ($real === false) return;
+
+        // Walk up a bounded number of levels -- real PCI trees are never
+        // more than a handful of hops deep, this just guards against an
+        // unexpected filesystem layout looping indefinitely.
+        for ($i = 0; $i < 6; $i++) {
+            $real = dirname($real);
+            $speedFile = "$real/max_link_speed";
+            $widthFile = "$real/max_link_width";
+            if (!is_file($speedFile) || !is_file($widthFile)) {
+                // Walked past the PCI device hierarchy entirely -- give up.
+                return;
+            }
+            $ancestorSpeed = trim(file_get_contents($speedFile));
+            $ancestorWidth = trim(file_get_contents($widthFile));
+
+            if ($ancestorSpeed !== $ownSpeed || $ancestorWidth !== $ownWidth) {
+                // Found a node reporting something genuinely different from
+                // the GPU's own bogus values -- treat this as the real link.
+                $this->pageData['pciegen'] = $this->get_pcie_gen($ancestorSpeed);
+                $this->pageData['pciewidthmax'] = $ancestorWidth;
+
+                $curSpeedFile = "$real/current_link_speed";
+                $curWidthFile = "$real/current_link_width";
+                $this->pageData['pciegenmax'] = is_file($curSpeedFile)
+                    ? $this->get_pcie_gen(trim(file_get_contents($curSpeedFile)))
+                    : $this->pageData['pciegen'];
+                $this->pageData['pciewidth'] = is_file($curWidthFile)
+                    ? trim(file_get_contents($curWidthFile))
+                    : $ancestorWidth;
+                return;
+            }
+        }
+    }
 
 }
