@@ -459,6 +459,23 @@ class Intel extends Main
                 if (isset($data['frequency']['actual'])) {
                     $this->pageData['clock'] = (int) $this->roundFloat($data['frequency']['actual']);
                 }
+                // rps_RP0_freq_mhz is the documented, stable sysfs interface
+                // for the theoretical fused hardware max GPU frequency (RP0).
+                // Newer multi-tile kernels nest it under gt/gt0/, older
+                // single-tile ones expose it flat on the card directory.
+                $cardPaths = glob("/sys/bus/pci/devices/{$this->settings['GPUID']}/drm/card*");
+                if (isset($cardPaths[0])) {
+                    $rp0Candidates = [
+                        "{$cardPaths[0]}/gt/gt0/rps_RP0_freq_mhz",
+                        "{$cardPaths[0]}/gt_RP0_freq_mhz",
+                    ];
+                    foreach ($rp0Candidates as $rp0Path) {
+                        if (is_readable($rp0Path)) {
+                            $this->pageData['clockmax'] = (int) trim(file_get_contents($rp0Path));
+                            break;
+                        }
+                    }
+                }
             }
             if ($this->settings['DISPINTERRUPT']) {
                 if (isset($data['interrupts']['count'])) {
