@@ -1,6 +1,12 @@
 # gpustat-unraid
 An UnRAID plugin for displaying GPU status
 
+# modified to properly show ARC and Battlemage 
+extra's bars are working, power usage, memory usage all working properly, pcie lanes and active lanes detection working: 
+<img width="613" height="308" alt="image" src="https://github.com/user-attachments/assets/1e8bb9ec-12f6-40d7-bf98-13a37015c1e7" />
+
+
+
 ## Prerequisites
 
 #### NVIDIA:
