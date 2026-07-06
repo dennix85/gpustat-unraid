@@ -92,7 +92,7 @@ foreach ($multigpus as $id=>$gpu) {
     <tr><td><i class='icon-hardware f32'></i>
     $stats
     <a href="/Dashboard/Settings/GPUStatSettings" title="_(Go to GPU Statistics settings)_"><i class="fa fa-fw fa-cog control"></i></a></td></tr>
-    <tr class="header"><td><span class="w18">_(Vendor)_</span><span class="w18">_(Driver)_</span><span class="w44">_(Device)_</span><span class="w18">_(Max Clock / Total Memory / Max Power)_</span></td></tr>
+
     $layout
     <tr class="vfio_inuse$i" hidden><td><span></span></td></tr>
     <tr class="vfio_inuse$i" hidden><td><span class="vfio_status$i">_(GPU not available bound to VFIO or inuse in a VM.)_</span> <img id="vmicon$i" class="vmicon$i" style='max-width: 18px; max-height: 18px; width: auto; height: auto; object-fit: contain;' src="/plugins/dynamix.vm.manager/templates/images/default.png" ></td></tr>
@@ -131,23 +131,28 @@ $gpu_nv = $gpu_intel = $gpu_amd = $gpu_unknown = false;
 
     $page_render = '<tr class="updated"><td>' ;
     $page_render = '<tr class="updated"><td>' ;
-    $page_render .= "<span><span class='gpu-vendor$count w18'></span><span class='gpu-driver$count w18'></span></span>&nbsp;<span class='gpu-name$count w18'></span>" ;
-    $page_render .= "<span class='w18'>" ;
-    $page_render .= "<span class='gpu-clockmax$count'></span> MHz<br>" ;
-    $page_render .= "<span class='gpu-memtotal$count'></span><br>" ;
-    $page_render .= "<span class='gpu-powermax$count'></span> W" ;
-    $page_render .= "</span></td></tr>" ;
+    $page_render .= "<div style='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;'>" ;
+    $cardStyle = "background:rgba(255,255,255,0.06);border-radius:4px;padding:4px 8px;" ;
+    $labelStyle = "font-size:10px;opacity:0.65;line-height:1.2;" ;
+
+    $page_render .= "<div style='$cardStyle min-width:60px;'><div style='$labelStyle'>_(Vendor)_</div><span class='gpu-vendor$count'></span></div>" ;
+    $page_render .= "<div style='$cardStyle min-width:60px;'><div style='$labelStyle'>_(Driver)_</div><span class='gpu-driver$count'></span></div>" ;
+    $page_render .= "<div style='$cardStyle min-width:120px;'><div style='$labelStyle'>_(Device)_</div><span class='gpu-name$count'></span></div>" ;
+    $page_render .= "<div style='$cardStyle min-width:90px;'><div style='$labelStyle'>_(Max Clock)_</div><span class='gpu-clockmax$count'></span> MHz</div>" ;
+    $page_render .= "<div style='$cardStyle min-width:90px;'><div style='$labelStyle'>_(Total Memory)_</div><span class='gpu-memtotal$count'></span></div>" ;
+    $page_render .= "<div style='$cardStyle min-width:70px;'><div style='$labelStyle'>_(Max Power)_</div><span class='gpu-powermax$count'></span> W</div>" ;
+    if ($gpustat_cfg['DISPPCIUTIL']) {
+        $page_render .= "<div class='nopcie$count' style='$cardStyle min-width:110px;'><div style='$labelStyle'>_(PCIe Gen / Lanes)_</div>" ;
+        $page_render .= "<span class='gpu-pciegen$count'></span>/<span class='gpu-pciegenmax$count'></span>&nbsp;x<span class='gpu-pciewidth$count'></span>/<span class='gpu-pciewidthmax$count'></span></div>" ;
+    }
+    $page_render .= "</div></td></tr>" ;
 
     # No GPU Set 
 
     if ($gpu_unknown)  $page_render .= "<tr><td><span>_(No GPUs selected - Select GPU(s) in GPUStat settings page and apply.)_</span></td></tr>" ; 
 
-    if($gpustat_cfg['DISPPCIUTIL']) {
-        $page_render .= "<tr class='nopcie$count'><td><span class='w36'><i class='ups fa fa-fw icon-hardware'></i>_(PCI Bus Utilization)_</span>" ;
-        $page_render .= "<span class='nopcie$count' id='gpu-pciegen$count'>PCIe Gen (Max): <span class='gpu-pciegen$count '></span>&nbsp;(<span class='gpu-pciegenmax$count '></span>)</span>" ;
-        $page_render .= "<span class=' nopcie$count' id='gpu-pciewidth$count'>Lanes (Max): <span class='gpu-pciewidth$count '></span>&nbsp;(<span class='gpu-pciewidthmax$count '></span>)</span>" ;
-                    $page_render .= "</td></tr>" ;
-    }
+    # PCI Bus Utilization now shown as a card above, not a separate row.
+
 
     # Nvidia GPUs
     if ($gpu_nv) {
