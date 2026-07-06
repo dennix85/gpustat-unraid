@@ -2,7 +2,8 @@
 An UnRAID plugin for displaying GPU status
 
 # modified to properly show ARC and Battlemage 
-extra's bars are working, power usage, memory usage all working properly, pcie lanes and active lanes detection working: 
+extra's bars are working, power usage, memory usage all working properly, pcie lanes and active lanes detection working
+switch to card based info and added gpu extra detection for max clock and memory and power draw: 
 <img width="613" height="308" alt="image" src="https://github.com/user-attachments/assets/1e8bb9ec-12f6-40d7-bf98-13a37015c1e7" />
 
 
